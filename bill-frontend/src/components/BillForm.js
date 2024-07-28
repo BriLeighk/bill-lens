@@ -35,7 +35,7 @@ const BillForm = () => {
 
     return (
         <div className="bill-form-container">
-            <h1 className="bill-title">BillLens</h1>
+            <h1 className="bill-title">Bill Lens.AI</h1>
             <div className="container-wrapper">
                 <div className="about-text">
                     <h2 className="about-title">About</h2>

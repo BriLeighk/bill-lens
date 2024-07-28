@@ -1,0 +1,27 @@
+{
+  "version": 2,
+  "builds": [
+    {
+      "src": "wsgi.py",
+      "use": "@vercel/python",
+      "config": { "maxLambdaSize": "15mb" }
+    },
+    {
+      "src": "bill-frontend/package.json",
+      "use": "@vercel/static-build",
+      "config": {
+        "distDir": "build"
+      }
+    }
+  ],
+  "routes": [
+    {
+      "src": "/components/(.*)",
+      "dest": "/wsgi.py"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/bill-frontend/build/$1"
+    }
+  ]
+}

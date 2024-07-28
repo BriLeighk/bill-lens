@@ -1,4 +1,5 @@
-from flask import Flask, request, jsonify
+import logging
+from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 import xml.etree.ElementTree as ET
 from cdg_client import CDGClient
@@ -21,7 +22,10 @@ import numpy as np
 import seaborn as sns
 import matplotlib.pyplot as plt
 
-app = Flask(__name__)
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+
+app = Flask(__name__, static_folder='../../bill-frontend/build', static_url_path='/')
 CORS(app, resources={r"/*": {"origins": "*"}})  # Enable CORS for all routes
 
 # Configuration Constants
@@ -68,7 +72,7 @@ def fetch_bill_data(client, congress, bill_type, bill_nums):
         bill_xml = get_bill_details(client, congress, bill_type, bill_num)
         bill_info = extract_bill_info(bill_xml)
         bills.append(bill_info)
-        print(f"Fetched Bill Title: {bill_info['title']}")  # Display the title of each bill
+        logging.info(f"Fetched Bill Title: {bill_info['title']}")  # Display the title of each bill
     return bills
 
 def summarize_bill_with_gemini(bill_title):
@@ -117,6 +121,7 @@ def summarize_bill_with_gemini(bill_title):
 @app.route('/fetch-bill', methods=['POST'])
 def fetch_bill():
     data = request.json
+    logging.info(f"Received data: {data}")
     congress = data.get('congress')
     bill_num = data.get('bill_num')
 
@@ -132,6 +137,7 @@ def fetch_bill():
         config = ConfigParser()
         config.read(API_KEY_PATH)
         api_key = config.get("cdg_api", "api_auth_key")
+        logging.info(f"CDG API Key: {api_key}")
         client = CDGClient(api_key, response_format="xml")
         # Set the Google API key environment variable
         google_api_key = config.get("google_api", "api_key")
@@ -148,8 +154,10 @@ def fetch_bill():
         if not bill_title:
             return jsonify({'error': 'The fetched bill has no title. Cannot proceed with summarization.'}), 400
         summary = summarize_bill_with_gemini(bill_title)
+        logging.info(f"Summary: {summary}")
         # Preprocess the text
         bill_text = preprocess_text(bill_info['text'])
+        logging.info(f"Preprocessed text: {bill_text}")
         # Predict and display the result
         prediction = model.predict([bill_text])[0]
         probabilities = model.predict_proba([bill_text])[0]
@@ -167,22 +175,34 @@ def fetch_bill():
             }
         })
     except Exception as e:
+        logging.error(f"An error occurred: {e}")
         return jsonify({'error': str(e)}), 500
+
+# Serve React App
+@app.route('/', defaults={'path': ''})
+@app.route('/<path:path>')
+def serve_react_app(path):
+    if path != "" and os.path.exists(app.static_folder + '/' + path):
+        return send_from_directory(app.static_folder, path)
+    else:
+        return send_from_directory(app.static_folder, 'index.html')
 
 if __name__ == "__main__":
     # Initialize API client
     config = ConfigParser()
     config.read(API_KEY_PATH)
     api_key = config.get("cdg_api", "api_auth_key")
+    logging.info(f"CDG API Key: {api_key}")
     client = CDGClient(api_key, response_format="xml")
     # Fetch bill data
-    print(f"Fetching bill data for Congress {CONGRESS}...")
+    logging.info(f"Fetching bill data for Congress {CONGRESS}...")
     bill_data = fetch_bill_data(client, CONGRESS, BILL_HR, BILL_NUMS)
+    logging.info(f"Fetched bill data: {bill_data}")
     # Create a DataFrame
     df = pd.DataFrame(bill_data)
     # Check if the length of the party list matches the number of rows in the DataFrame
     if len(df) != len(BILL_NUMS):
-        print(f"Length of party list ({len(BILL_NUMS)}) does not match the number of rows in the DataFrame ({len(df)}). Adjusting the party list...")
+        logging.info(f"Length of party list ({len(BILL_NUMS)}) does not match the number of rows in the DataFrame ({len(df)}). Adjusting the party list...")
         party_list = ['Democratic', 'Democratic', 'Democratic', 'Democratic', 'Democratic', 'Democratic',
                       'Republican', 'Republican', 'Middle', 'Middle', 'Middle', 'Republican',
                       'Republican', 'Middle', 'Middle', 'Republican', 'Republican', 'Democratic', 'Republican',
@@ -243,8 +263,8 @@ if __name__ == "__main__":
     report = classification_report(y_test, predictions)
     # Cross-Validation
     cv_scores = cross_val_score(best_model, df['text'], labels, cv=5)
-    print(f'Cross-Validation Scores: {cv_scores}')
-    print(f'Average Cross-Validation Score: {np.mean(cv_scores)}')
+    logging.info(f'Cross-Validation Scores: {cv_scores}')
+    logging.info(f'Average Cross-Validation Score: {np.mean(cv_scores)}')
     # Confusion Matrix
     cm = confusion_matrix(y_test, predictions, labels=['Democratic', 'Republican', 'Middle'])
     sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', xticklabels=['Democratic', 'Republican', 'Middle'], yticklabels=['Democratic', 'Republican', 'Middle'])
