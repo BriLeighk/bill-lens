@@ -16,7 +16,7 @@
   ],
   "routes": [
     {
-      "src": "/components/(.*)",
+      "src": "/api/(.*)",
       "dest": "/wsgi.py"
     },
     {
